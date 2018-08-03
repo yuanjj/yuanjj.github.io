@@ -39,7 +39,13 @@
 
 ​	比如接入服务，上层业务添加设备至Master节点，然后Master将设备信息下发至Slave节点，再由Slave节点去连接前端设备，以及从前端设备取流。Master可以说是一个负载均衡器，也是一个元数据节点。Master监听Slave的状态，通过动态增删Slave节点，对服务集群进行扩缩容。
 
-​	要保证服务运行，至少需要一个Master和一个Slave。Master/Slave是服务的逻辑架构，实际可以部署在一台物理机上。在实际应用中，有一种小型化机型，一台服务器上面同时部署一个Master和一个Slave，同时还部署多个服务，以及部分SaaS业务。
+​	要保证服务运行，至少需要一个Master和一个Slave。Master/Slave是服务的逻辑架构，实际可以部署在一台物理机上。在实际应用中，有一种小型化机型，一台服务器上面同时部署一个Master和一个Slave，同时还部署多个服务，以及部分SaaS业务。一个小型化服务器即可提供一整套视频云功能。
+
+​	之前PaaS各服务会部署在一套物理机下面，例如如下图：
+
+​	![](../_images/phy.png)
+
+​	这种部署方式有一个好处是，服务之间可以走内部环回网络，不占用网络资源，如图中的视频流（箭头）。
 
 ### 3、服务高可用
 
@@ -53,7 +59,82 @@
 
 ### 4、实时流播放
 
-​	
+​	实时流播放是视频云的核心功能，涉及多个服务及多个流程。一个实时视频拉流包含两个步骤：
+
+- 获取拉流url：从paas服务获取拉流url。例如rtsp的url类似：rtsp://192.168.2.1/relamonitor?channel=123&token=123456&key=dsjj23fj3of234p，其中ip地址为转发任务所在的子节点ip，channel标识设备通道，token、key等用来做鉴权或者其他标识。
+
+
+```sequence
+participant Client AS C
+participant 转发 AS M
+participant 接入 AS I
+
+C -> M: GET URL
+M -> I: 获取设备所在子节点
+I -> M: 返回节点id ip
+note over M: 接入同节点开启转发\n组装转发URL
+M --> C: URL中为子节点ip
+```
+
+
+
+- 拉流：向刚才获取到的url地址获取码流。
+
+
+```sequence
+participant Client AS C
+participant 转发子节点 AS M
+participant 接入Master AS I
+participant 接入子节点 AS IS
+participant 设备 AS D
+
+C -> M: RTSP请求
+note over M,I:转发需要从接入那去取流
+M -> I: 获取设备拉流URL
+I --> M: 返回URL（子节点IP）
+note over M: 请求接入返回URL
+note right of IS: 接入子节点和转发子节点\n在一台物理机上
+M -> IS: RTSP请求
+IS -> D: 请求码流（各种对接协议）
+D -->> IS: 码流
+IS -->> M: 码流
+M --> C: 码流
+```
+
+### 5、录像与回放
+
+​	录像主要是由存储服务负责，和实时流类似，存储服务从接入服务取流，然后写入到云存储中。
+
+
+```sequence
+participant Client AS C
+participant 存储Master AS SM
+participant 存储子节点 AS M
+participant 云存储 AS CS
+participant 接入Master AS I
+participant 接入子节点 AS IS
+participant 设备 AS D
+C -> SM: 配置存储计划
+SM --> C: 
+SM -> I: 获取设备所在子节点
+I --> SM:
+SM -> M: 向所在节点下发任务
+M -> I: 获取设备拉流URL
+I --> M: 返回URL（子节点IP）
+note over M: 请求接入返回URL
+M -> IS: RTSP请求
+IS -> D: 请求码流（各种对接协议）
+D -->> IS: 码流
+IS -->> M: 码流
+M -> CS: 写入码流
+
+```
+
+
+
+
+
+
 
 4、多域
 
